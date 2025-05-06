@@ -25,10 +25,18 @@ func init() {
 	// Initialiser le générateur de nombres aléatoires
 	rand.Seed(time.Now().UnixNano())
 	
-	// Essayer d'abord de récupérer le token depuis les variables d'environnement
-	Token = os.Getenv("DISCORD_TOKEN")
+	// Lire le token depuis le fichier token.env
+	tokenBytes, err := os.ReadFile("token.env")
+	if err == nil {
+		Token = strings.TrimSpace(string(tokenBytes))
+	}
 	
-	// Si le token n'est pas dans les variables d'environnement, le demander à l'utilisateur
+	// Si le token n'est pas dans le fichier, essayer les variables d'environnement
+	if Token == "" {
+		Token = os.Getenv("DISCORD_TOKEN")
+	}
+	
+	// Si le token n'est toujours pas trouvé, le demander à l'utilisateur
 	if Token == "" {
 		fmt.Println("Token Discord non trouvé dans les variables d'environnement.")
 		fmt.Println("Veuillez entrer votre token Discord (il ne sera pas affiché) :")
