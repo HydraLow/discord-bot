@@ -106,6 +106,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			"!rps [pierre/papier/ciseaux] - Jouer à Pierre, Papier, Ciseaux\n" +
 			"!kick @utilisateur ou !kick ID [raison] - Expulser un utilisateur (Rôle Owner uniquement)\n" +
 			"!ban @utilisateur ou !ban ID [raison] - Bannir définitivement un utilisateur (Rôle Owner uniquement)\n" +
+			"!unban ID - Débannir un utilisateur (Rôle Owner uniquement)\n" +
 			"!tempban @utilisateur ou !tempban ID durée [raison] - Bannir temporairement un utilisateur (Rôle Owner uniquement)\n" +
 			"   Durée format: 1h, 1d, 1w, 1m (h=heure, d=jour, w=semaine, m=mois)"
 		_, err := s.ChannelMessageSend(m.ChannelID, helpMessage)
@@ -348,6 +349,49 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 				fmt.Printf("Erreur lors du débannissement automatique: %v\n", err)
 			}
 		}()
+	}
+
+	// Commande Unban
+	if strings.HasPrefix(m.Content, "!unban") {
+		// Vérifier les permissions
+		if !hasOwnerRole(s, m.GuildID, m.Author.ID) {
+			_, err := s.ChannelMessageSend(m.ChannelID, "❌ Seul le rôle 👑Owner peut utiliser cette commande!")
+			if err != nil {
+				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+			}
+			return
+		}
+
+		// Analyser la commande
+		parts := strings.Fields(m.Content)
+		if len(parts) != 2 {
+			_, err := s.ChannelMessageSend(m.ChannelID, "Usage: !unban ID")
+			if err != nil {
+				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+			}
+			return
+		}
+
+		// Extraire l'ID de l'utilisateur à débannir
+		targetID := parts[1]
+
+		// Débannir l'utilisateur
+		err := s.GuildBanDelete(m.GuildID, targetID)
+		if err != nil {
+			errorMsg := fmt.Sprintf("❌ Erreur lors du débannissement: %v", err)
+			_, err := s.ChannelMessageSend(m.ChannelID, errorMsg)
+			if err != nil {
+				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+			}
+			return
+		}
+
+		// Confirmer le débannissement
+		successMsg := fmt.Sprintf("✅ Utilisateur <@%s> a été débanni avec succès!", targetID)
+		_, err = s.ChannelMessageSend(m.ChannelID, successMsg)
+		if err != nil {
+			fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+		}
 	}
 }
 
