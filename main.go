@@ -543,8 +543,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Vérifier les permissions
 		if !hasOwnerRole(s, m.GuildID, m.Author.ID) {
 			embed := &discordgo.MessageEmbed{
-				Title:       "❌ Permission refusée",
-				Description: "Seul le rôle 👑Owner peut utiliser cette commande!",
+				Title:       "Permission refusée",
+				Description: "Seul le rôle Owner peut utiliser cette commande!",
 				Color:       0xff0000,
 			}
 			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
@@ -561,21 +561,22 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			Color:       0x00ff00,
 		}
 
-		// Créer le bouton de vérification
-		row := discordgo.ActionsRow{
-			Components: []discordgo.MessageComponent{
-				discordgo.Button{
-					Label:    "Vérifier",
-					Style:    discordgo.PrimaryButton,
-					CustomID: "verify_button",
-				},
-			},
+		// Créer le bouton de vérification avec une structure minimale
+		button := discordgo.Button{
+			Label:    "Vérifier",
+			Style:    discordgo.PrimaryButton,
+			CustomID: "verify_button",
+		}
+
+		// Créer la ligne d'action avec le bouton
+		actionRow := discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{button},
 		}
 
 		// Envoyer le message avec le bouton
 		_, err := s.ChannelMessageSendComplex(m.ChannelID, &discordgo.MessageSend{
 			Embed:      embed,
-			Components: []discordgo.MessageComponent{row},
+			Components: []discordgo.MessageComponent{actionRow},
 		})
 		if err != nil {
 			fmt.Printf("Erreur lors de l'envoi du message de vérification: %v\n", err)
