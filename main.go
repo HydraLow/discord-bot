@@ -19,6 +19,10 @@ var (
 	Token string
 	// Nom du rôle Owner
 	OwnerRoleName = "👑Owner"
+	// Nom du rôle de vérification
+	VerifiedRoleName = "✅Verified"
+	// Noms des rôles auto-attribués
+	FortniteRoleName = "FORTNITE PLAYER"
 )
 
 func init() {
@@ -73,9 +77,10 @@ func main() {
 	// Ajouter les handlers d'événements
 	dg.AddHandler(messageCreate)
 	dg.AddHandler(ready)
+	dg.AddHandler(interactionCreate) // Ajouter le handler pour les interactions (boutons)
 
 	// Activer les intents nécessaires
-	dg.Identify.Intents = discordgo.IntentsAllWithoutPrivileged | discordgo.IntentMessageContent
+	dg.Identify.Intents = discordgo.IntentsAllWithoutPrivileged | discordgo.IntentMessageContent | discordgo.IntentGuildMembers
 
 	// Ouvrir la connexion
 	err = dg.Open()
@@ -532,6 +537,57 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			}
 		}()
 	}
+
+	// Commande pour créer le message de vérification
+	if m.Content == "!setupverify" {
+		// Vérifier les permissions
+		if !hasOwnerRole(s, m.GuildID, m.Author.ID) {
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Permission refusée",
+				Description: "Seul le rôle 👑Owner peut utiliser cette commande!",
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
+			if err != nil {
+				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+			}
+			return
+		}
+
+		// Créer le message de vérification
+		embed := &discordgo.MessageEmbed{
+			Title:       "🔒 Vérification",
+			Description: "Cliquez sur le bouton ci-dessous pour accéder au serveur.",
+			Color:       0x00ff00,
+		}
+
+		// Créer le bouton de vérification
+		row := discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				discordgo.Button{
+					Label:    "Vérifier",
+					Style:    discordgo.PrimaryButton,
+					CustomID: "verify_button",
+				},
+			},
+		}
+
+		// Envoyer le message avec le bouton
+		_, err := s.ChannelMessageSendComplex(m.ChannelID, &discordgo.MessageSend{
+			Embed:      embed,
+			Components: []discordgo.MessageComponent{row},
+		})
+		if err != nil {
+			fmt.Printf("Erreur lors de l'envoi du message de vérification: %v\n", err)
+			return
+		}
+
+		// Supprimer la commande
+		err = s.ChannelMessageDelete(m.ChannelID, m.ID)
+		if err != nil {
+			fmt.Printf("Erreur lors de la suppression de la commande: %v\n", err)
+		}
+	}
 }
 
 func determineWinner(player, bot string) string {
@@ -595,5 +651,53 @@ func parseDuration(duration string) (time.Duration, error) {
 		return time.Duration(num) * 30 * 24 * time.Hour, nil
 	default:
 		return 0, fmt.Errorf("unité de temps invalide")
+	}
+}
+
+// Fonction pour gérer les interactions (boutons)
+func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if i.Type == discordgo.InteractionMessageComponent {
+		// Vérifier si c'est le bouton de vérification
+		if i.MessageComponentData().CustomID == "verify_button" {
+			// Récupérer tous les rôles du serveur
+			roles, err := s.GuildRoles(i.GuildID)
+			if err != nil {
+				fmt.Printf("Erreur lors de la récupération des rôles: %v\n", err)
+				return
+			}
+
+			// Trouver l'ID du rôle de vérification
+			var verifiedRoleID string
+			for _, role := range roles {
+				if role.Name == VerifiedRoleName {
+					verifiedRoleID = role.ID
+					break
+				}
+			}
+
+			if verifiedRoleID != "" {
+				// Ajouter le rôle à l'utilisateur
+				params := &discordgo.GuildMemberParams{
+					Roles: &[]string{verifiedRoleID},
+				}
+				_, err = s.GuildMemberEdit(i.GuildID, i.Member.User.ID, params)
+				if err != nil {
+					fmt.Printf("Erreur lors de l'attribution du rôle: %v\n", err)
+					return
+				}
+
+				// Répondre à l'interaction
+				err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "✅ Vous avez été vérifié avec succès!",
+						Flags:   discordgo.MessageFlagsEphemeral, // Message visible uniquement par l'utilisateur
+					},
+				})
+				if err != nil {
+					fmt.Printf("Erreur lors de la réponse à l'interaction: %v\n", err)
+				}
+			}
+		}
 	}
 } 
