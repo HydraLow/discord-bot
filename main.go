@@ -556,7 +556,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		// Créer le message de vérification
 		embed := &discordgo.MessageEmbed{
-			Title:       "🔒 Vérification",
+			Title:       "Vérification",
 			Description: "Cliquez sur le bouton ci-dessous pour accéder au serveur.",
 			Color:       0x00ff00,
 		}
