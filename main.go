@@ -32,16 +32,24 @@ func init() {
 	// Lire le token depuis le fichier token.env
 	tokenBytes, err := os.ReadFile("token.env")
 	if err == nil {
+		fmt.Println("Token trouvé dans le fichier token.env")
 		Token = strings.TrimSpace(string(tokenBytes))
 		// Si le token commence par "DISCORD_TOKEN=", l'enlever
 		if strings.HasPrefix(Token, "DISCORD_TOKEN=") {
 			Token = strings.TrimPrefix(Token, "DISCORD_TOKEN=")
 		}
+	} else {
+		fmt.Println("Aucun fichier token.env trouvé")
 	}
 	
 	// Si le token n'est pas dans le fichier, essayer les variables d'environnement
 	if Token == "" {
 		Token = os.Getenv("DISCORD_TOKEN")
+		if Token != "" {
+			fmt.Println("Token trouvé dans les variables d'environnement")
+		} else {
+			fmt.Println("Aucun token trouvé dans les variables d'environnement")
+		}
 	}
 	
 	// Si le token n'est toujours pas trouvé, le demander à l'utilisateur
@@ -65,6 +73,9 @@ func init() {
 	if Token == "" {
 		log.Fatal("Token Discord requis pour démarrer le bot")
 	}
+
+	// Afficher les 4 premiers caractères du token pour vérification
+	fmt.Printf("Token trouvé (premiers caractères): %s...\n", Token[:4])
 }
 
 func main() {
