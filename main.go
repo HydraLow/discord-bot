@@ -156,6 +156,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if err != nil {
 			fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 		}
+		return
 	}
 
 	// Commande Pierre, Papier, Ciseaux
