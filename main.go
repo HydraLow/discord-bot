@@ -29,6 +29,10 @@ func init() {
 	tokenBytes, err := os.ReadFile("token.env")
 	if err == nil {
 		Token = strings.TrimSpace(string(tokenBytes))
+		// Si le token commence par "DISCORD_TOKEN=", l'enlever
+		if strings.HasPrefix(Token, "DISCORD_TOKEN=") {
+			Token = strings.TrimPrefix(Token, "DISCORD_TOKEN=")
+		}
 	}
 	
 	// Si le token n'est pas dans le fichier, essayer les variables d'environnement
@@ -44,6 +48,14 @@ func init() {
 		reader := bufio.NewReader(os.Stdin)
 		Token, _ = reader.ReadString('\n')
 		Token = strings.TrimSpace(Token)
+	}
+
+	// Vérifier si le token a le bon format
+	if !strings.HasPrefix(Token, "MT") && !strings.HasPrefix(Token, "NT") {
+		fmt.Println("❌ Le token fourni ne semble pas être un token Discord valide.")
+		fmt.Println("Un token Discord commence généralement par 'MT' ou 'NT'.")
+		fmt.Println("Veuillez vérifier votre token dans le portail développeur Discord.")
+		os.Exit(1)
 	}
 
 	if Token == "" {
@@ -108,16 +120,39 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Commande d'aide
 	if m.Content == "!help" {
 		fmt.Println("Commande !help détectée")
-		helpMessage := "**Commandes disponibles:**\n" +
-			"!ping - Vérifier si le bot est en ligne\n" +
-			"!help - Afficher ce message d'aide\n" +
-			"!rps [pierre/papier/ciseaux] - Jouer à Pierre, Papier, Ciseaux\n" +
-			"!kick @utilisateur ou !kick ID [raison] - Expulser un utilisateur (Rôle Owner uniquement)\n" +
-			"!ban @utilisateur ou !ban ID [raison] - Bannir définitivement un utilisateur (Rôle Owner uniquement)\n" +
-			"!unban ID - Débannir un utilisateur (Rôle Owner uniquement)\n" +
-			"!tempban @utilisateur ou !tempban ID durée [raison] - Bannir temporairement un utilisateur (Rôle Owner uniquement)\n" +
-			"   Durée format: 1h, 1d, 1w, 1m (h=heure, d=jour, w=semaine, m=mois)"
-		_, err := s.ChannelMessageSend(m.ChannelID, helpMessage)
+		
+		embed := &discordgo.MessageEmbed{
+			Title:       "📚 Commandes disponibles",
+			Description: "Voici la liste des commandes du bot :",
+			Color:       0x00ff00, // Vert
+			Fields: []*discordgo.MessageEmbedField{
+				{
+					Name:   "🎮 Commandes de base",
+					Value:  "`!ping` - Vérifier si le bot est en ligne\n`!help` - Afficher ce message d'aide",
+					Inline: false,
+				},
+				{
+					Name:   "🎲 Mini-jeux",
+					Value:  "`!rps [pierre/papier/ciseaux]` - Jouer à Pierre, Papier, Ciseaux",
+					Inline: false,
+				},
+				{
+					Name:   "🛡️ Modération",
+					Value:  "`!kick @utilisateur [raison]` - Expulser un utilisateur\n`!ban @utilisateur [raison]` - Bannir définitivement\n`!unban @utilisateur` - Débannir un utilisateur\n`!tempban @utilisateur durée [raison]` - Bannir temporairement",
+					Inline: false,
+				},
+				{
+					Name:   "⏱️ Format de durée",
+					Value:  "`h` - Heures (ex: 1h)\n`d` - Jours (ex: 1d)\n`w` - Semaines (ex: 1w)\n`m` - Mois (ex: 1m)",
+					Inline: false,
+				},
+			},
+			Footer: &discordgo.MessageEmbedFooter{
+				Text: "Rôle 👑Owner requis pour les commandes de modération",
+			},
+		}
+		
+		_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
 		if err != nil {
 			fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 		}
@@ -165,28 +200,14 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	// Commande Kick
 	if strings.HasPrefix(m.Content, "!kick") {
-		// Récupérer les informations du membre
-		member, err := s.GuildMember(m.GuildID, m.Author.ID)
-		if err != nil {
-			fmt.Printf("Erreur lors de la récupération du membre: %v\n", err)
-			return
-		}
-
-		// Vérifier si l'utilisateur a le rôle Owner
-		hasOwnerRole := false
-		for _, roleID := range member.Roles {
-			role, err := s.State.Role(m.GuildID, roleID)
-			if err != nil {
-				continue
+		// Vérifier les permissions
+		if !hasOwnerRole(s, m.GuildID, m.Author.ID) {
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Permission refusée",
+				Description: "Seul le rôle 👑Owner peut utiliser cette commande!",
+				Color:       0xff0000, // Rouge
 			}
-			if role.Name == "👑Owner" {
-				hasOwnerRole = true
-				break
-			}
-		}
-
-		if !hasOwnerRole {
-			_, err := s.ChannelMessageSend(m.ChannelID, "❌ Seul le rôle 👑Owner peut utiliser cette commande!")
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
 			if err != nil {
 				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 			}
@@ -196,7 +217,12 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Analyser la commande
 		parts := strings.Fields(m.Content)
 		if len(parts) < 2 {
-			_, err := s.ChannelMessageSend(m.ChannelID, "Usage: !kick @utilisateur ou !kick ID [raison]")
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Usage incorrect",
+				Description: "Usage: `!kick @utilisateur [raison]` ou `!kick ID [raison]`",
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
 			if err != nil {
 				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 			}
@@ -205,11 +231,10 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		// Extraire l'ID de l'utilisateur à expulser
 		targetID := parts[1]
-		// Si c'est une mention, nettoyer l'ID
 		if strings.HasPrefix(targetID, "<@") && strings.HasSuffix(targetID, ">") {
 			targetID = strings.Trim(targetID, "<@!>")
 		}
-		
+
 		// Extraire la raison (optionnelle)
 		reason := "Aucune raison fournie"
 		if len(parts) > 2 {
@@ -217,10 +242,14 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		// Expulser l'utilisateur
-		err = s.GuildMemberDeleteWithReason(m.GuildID, targetID, reason)
+		err := s.GuildMemberDeleteWithReason(m.GuildID, targetID, reason)
 		if err != nil {
-			errorMsg := fmt.Sprintf("❌ Erreur lors de l'expulsion: %v", err)
-			_, err := s.ChannelMessageSend(m.ChannelID, errorMsg)
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Erreur",
+				Description: fmt.Sprintf("Erreur lors de l'expulsion: %v", err),
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
 			if err != nil {
 				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 			}
@@ -228,8 +257,19 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		// Confirmer l'expulsion
-		successMsg := fmt.Sprintf("✅ Utilisateur expulsé avec succès!\nRaison: %s", reason)
-		_, err = s.ChannelMessageSend(m.ChannelID, successMsg)
+		embed := &discordgo.MessageEmbed{
+			Title:       "✅ Utilisateur expulsé",
+			Description: fmt.Sprintf("L'utilisateur <@%s> a été expulsé avec succès!", targetID),
+			Color:       0x00ff00,
+			Fields: []*discordgo.MessageEmbedField{
+				{
+					Name:   "Raison",
+					Value:  reason,
+					Inline: false,
+				},
+			},
+		}
+		_, err = s.ChannelMessageSendEmbed(m.ChannelID, embed)
 		if err != nil {
 			fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 		}
@@ -239,7 +279,12 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if strings.HasPrefix(m.Content, "!ban") {
 		// Vérifier les permissions
 		if !hasOwnerRole(s, m.GuildID, m.Author.ID) {
-			_, err := s.ChannelMessageSend(m.ChannelID, "❌ Seul le rôle 👑Owner peut utiliser cette commande!")
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Permission refusée",
+				Description: "Seul le rôle 👑Owner peut utiliser cette commande!",
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
 			if err != nil {
 				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 			}
@@ -249,7 +294,12 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Analyser la commande
 		parts := strings.Fields(m.Content)
 		if len(parts) < 2 {
-			_, err := s.ChannelMessageSend(m.ChannelID, "Usage: !ban @utilisateur ou !ban ID [raison]")
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Usage incorrect",
+				Description: "Usage: `!ban @utilisateur [raison]` ou `!ban ID [raison]`",
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
 			if err != nil {
 				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 			}
@@ -271,8 +321,12 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Bannir l'utilisateur
 		err := s.GuildBanCreateWithReason(m.GuildID, targetID, reason, 0)
 		if err != nil {
-			errorMsg := fmt.Sprintf("❌ Erreur lors du bannissement: %v", err)
-			_, err := s.ChannelMessageSend(m.ChannelID, errorMsg)
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Erreur",
+				Description: fmt.Sprintf("Erreur lors du bannissement: %v", err),
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
 			if err != nil {
 				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 			}
@@ -280,8 +334,97 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		// Confirmer le bannissement
-		successMsg := fmt.Sprintf("✅ Utilisateur banni définitivement!\nRaison: %s", reason)
-		_, err = s.ChannelMessageSend(m.ChannelID, successMsg)
+		embed := &discordgo.MessageEmbed{
+			Title:       "✅ Utilisateur banni",
+			Description: fmt.Sprintf("L'utilisateur <@%s> a été banni définitivement!", targetID),
+			Color:       0x00ff00,
+			Fields: []*discordgo.MessageEmbedField{
+				{
+					Name:   "Raison",
+					Value:  reason,
+					Inline: false,
+				},
+			},
+		}
+		_, err = s.ChannelMessageSendEmbed(m.ChannelID, embed)
+		if err != nil {
+			fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+		}
+	}
+
+	// Commande Unban
+	if strings.HasPrefix(m.Content, "!unban") {
+		// Vérifier les permissions
+		if !hasOwnerRole(s, m.GuildID, m.Author.ID) {
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Permission refusée",
+				Description: "Seul le rôle 👑Owner peut utiliser cette commande!",
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
+			if err != nil {
+				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+			}
+			return
+		}
+
+		// Analyser la commande
+		parts := strings.Fields(m.Content)
+		if len(parts) != 2 {
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Usage incorrect",
+				Description: "Usage: `!unban @utilisateur` ou `!unban ID`",
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
+			if err != nil {
+				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+			}
+			return
+		}
+
+		// Extraire l'ID de l'utilisateur à débannir
+		targetID := parts[1]
+		if strings.HasPrefix(targetID, "<@") && strings.HasSuffix(targetID, ">") {
+			targetID = strings.Trim(targetID, "<@!>")
+		}
+
+		// Vérifier si l'ID est valide
+		if _, err := strconv.ParseInt(targetID, 10, 64); err != nil {
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ ID invalide",
+				Description: "ID d'utilisateur invalide. Utilisez un ID valide ou une mention.",
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
+			if err != nil {
+				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+			}
+			return
+		}
+
+		// Débannir l'utilisateur
+		err := s.GuildBanDelete(m.GuildID, targetID)
+		if err != nil {
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Erreur",
+				Description: fmt.Sprintf("Erreur lors du débannissement: %v", err),
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
+			if err != nil {
+				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+			}
+			return
+		}
+
+		// Confirmer le débannissement
+		embed := &discordgo.MessageEmbed{
+			Title:       "✅ Utilisateur débanni",
+			Description: fmt.Sprintf("L'utilisateur <@%s> a été débanni avec succès!", targetID),
+			Color:       0x00ff00,
+		}
+		_, err = s.ChannelMessageSendEmbed(m.ChannelID, embed)
 		if err != nil {
 			fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 		}
@@ -291,7 +434,12 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if strings.HasPrefix(m.Content, "!tempban") {
 		// Vérifier les permissions
 		if !hasOwnerRole(s, m.GuildID, m.Author.ID) {
-			_, err := s.ChannelMessageSend(m.ChannelID, "❌ Seul le rôle 👑Owner peut utiliser cette commande!")
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Permission refusée",
+				Description: "Seul le rôle 👑Owner peut utiliser cette commande!",
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
 			if err != nil {
 				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 			}
@@ -301,7 +449,12 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Analyser la commande
 		parts := strings.Fields(m.Content)
 		if len(parts) < 3 {
-			_, err := s.ChannelMessageSend(m.ChannelID, "Usage: !tempban @utilisateur ou !tempban ID durée [raison]\nDurée format: 1h, 1d, 1w, 1m (h=heure, d=jour, w=semaine, m=mois)")
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Usage incorrect",
+				Description: "Usage: `!tempban @utilisateur durée [raison]` ou `!tempban ID durée [raison]`\nDurée format: 1h, 1d, 1w, 1m (h=heure, d=jour, w=semaine, m=mois)",
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
 			if err != nil {
 				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 			}
@@ -318,7 +471,12 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		duration := parts[2]
 		banDuration, err := parseDuration(duration)
 		if err != nil {
-			_, err := s.ChannelMessageSend(m.ChannelID, "❌ Format de durée invalide! Utilisez: 1h, 1d, 1w, 1m")
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Durée invalide",
+				Description: "Format de durée invalide! Utilisez: 1h, 1d, 1w, 1m",
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
 			if err != nil {
 				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 			}
@@ -334,8 +492,12 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Bannir l'utilisateur
 		err = s.GuildBanCreateWithReason(m.GuildID, targetID, fmt.Sprintf("%s (Tempban: %s)", reason, duration), 0)
 		if err != nil {
-			errorMsg := fmt.Sprintf("❌ Erreur lors du bannissement temporaire: %v", err)
-			_, err := s.ChannelMessageSend(m.ChannelID, errorMsg)
+			embed := &discordgo.MessageEmbed{
+				Title:       "❌ Erreur",
+				Description: fmt.Sprintf("Erreur lors du bannissement temporaire: %v", err),
+				Color:       0xff0000,
+			}
+			_, err := s.ChannelMessageSendEmbed(m.ChannelID, embed)
 			if err != nil {
 				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 			}
@@ -343,8 +505,19 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		// Confirmer le bannissement temporaire
-		successMsg := fmt.Sprintf("✅ Utilisateur banni temporairement pour %s!\nRaison: %s", duration, reason)
-		_, err = s.ChannelMessageSend(m.ChannelID, successMsg)
+		embed := &discordgo.MessageEmbed{
+			Title:       "✅ Utilisateur banni temporairement",
+			Description: fmt.Sprintf("L'utilisateur <@%s> a été banni pour %s!", targetID, duration),
+			Color:       0x00ff00,
+			Fields: []*discordgo.MessageEmbedField{
+				{
+					Name:   "Raison",
+					Value:  reason,
+					Inline: false,
+				},
+			},
+		}
+		_, err = s.ChannelMessageSendEmbed(m.ChannelID, embed)
 		if err != nil {
 			fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 		}
@@ -357,67 +530,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 				fmt.Printf("Erreur lors du débannissement automatique: %v\n", err)
 			}
 		}()
-	}
-
-	// Commande Unban
-	if strings.HasPrefix(m.Content, "!unban") {
-		// Vérifier les permissions
-		if !hasOwnerRole(s, m.GuildID, m.Author.ID) {
-			_, err := s.ChannelMessageSend(m.ChannelID, "❌ Seul le rôle 👑Owner peut utiliser cette commande!")
-			if err != nil {
-				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
-			}
-			return
-		}
-
-		// Analyser la commande
-		parts := strings.Fields(m.Content)
-		if len(parts) != 2 {
-			_, err := s.ChannelMessageSend(m.ChannelID, "Usage: !unban @utilisateur ou !unban ID")
-			if err != nil {
-				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
-			}
-			return
-		}
-
-		// Extraire l'ID de l'utilisateur à débannir
-		targetID := parts[1]
-		
-		// Si c'est une mention, extraire l'ID
-		if strings.HasPrefix(targetID, "<@") && strings.HasSuffix(targetID, ">") {
-			// Enlever <@ et >
-			targetID = strings.TrimPrefix(targetID, "<@")
-			targetID = strings.TrimSuffix(targetID, ">")
-			// Enlever le ! s'il y en a un
-			targetID = strings.TrimPrefix(targetID, "!")
-		}
-
-		// Vérifier si l'ID est valide
-		if _, err := strconv.ParseInt(targetID, 10, 64); err != nil {
-			_, err := s.ChannelMessageSend(m.ChannelID, "❌ ID d'utilisateur invalide. Utilisez un ID valide ou une mention.")
-			if err != nil {
-				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
-			}
-			return
-		}
-
-		// Débannir l'utilisateur
-		err := s.GuildBanDelete(m.GuildID, targetID)
-		if err != nil {
-			errorMsg := fmt.Sprintf("❌ Erreur lors du débannissement: %v", err)
-			_, err := s.ChannelMessageSend(m.ChannelID, errorMsg)
-			if err != nil {
-				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
-			}
-			return
-		}
-
-		// Confirmer le débannissement
-		successMsg := fmt.Sprintf("✅ Utilisateur <@%s> a été débanni avec succès!", targetID)
-		_, err = s.ChannelMessageSend(m.ChannelID, successMsg)
-		if err != nil {
-			fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
-		}
 	}
 }
 
