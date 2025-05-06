@@ -16,11 +16,8 @@ import (
 
 var (
 	Token string
-	// Liste des IDs des rôles autorisés à utiliser la commande kick
-	AllowedRoles = []string{
-		"ADMIN_ROLE_ID", // Remplacez par l'ID du rôle admin
-		"MOD_ROLE_ID",   // Remplacez par l'ID du rôle modérateur
-	}
+	// ID du rôle Owner
+	OwnerRoleID = "👑Owner" // Remplacez par l'ID réel du rôle
 )
 
 func init() {
@@ -106,7 +103,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			"!ping - Vérifier si le bot est en ligne\n" +
 			"!help - Afficher ce message d'aide\n" +
 			"!rps [pierre/papier/ciseaux] - Jouer à Pierre, Papier, Ciseaux\n" +
-			"!kick @utilisateur [raison] - Expulser un utilisateur (Propriétaire uniquement)"
+			"!kick @utilisateur [raison] - Expulser un utilisateur (Rôle Owner uniquement)"
 		_, err := s.ChannelMessageSend(m.ChannelID, helpMessage)
 		if err != nil {
 			fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
@@ -155,16 +152,28 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	// Commande Kick
 	if strings.HasPrefix(m.Content, "!kick") {
-		// Récupérer les informations du serveur
-		guild, err := s.Guild(m.GuildID)
+		// Récupérer les informations du membre
+		member, err := s.GuildMember(m.GuildID, m.Author.ID)
 		if err != nil {
-			fmt.Printf("Erreur lors de la récupération du serveur: %v\n", err)
+			fmt.Printf("Erreur lors de la récupération du membre: %v\n", err)
 			return
 		}
 
-		// Vérifier si l'utilisateur est le propriétaire du serveur
-		if m.Author.ID != guild.OwnerID {
-			_, err := s.ChannelMessageSend(m.ChannelID, "❌ Seul le propriétaire du serveur peut utiliser cette commande!")
+		// Vérifier si l'utilisateur a le rôle Owner
+		hasOwnerRole := false
+		for _, roleID := range member.Roles {
+			role, err := s.State.Role(m.GuildID, roleID)
+			if err != nil {
+				continue
+			}
+			if role.Name == "👑Owner" {
+				hasOwnerRole = true
+				break
+			}
+		}
+
+		if !hasOwnerRole {
+			_, err := s.ChannelMessageSend(m.ChannelID, "❌ Seul le rôle 👑Owner peut utiliser cette commande!")
 			if err != nil {
 				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 			}
