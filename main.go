@@ -17,8 +17,8 @@ import (
 
 var (
 	Token string
-	// ID du rôle Owner
-	OwnerRoleID = "1234567890" // Remplacez par l'ID réel du rôle Owner de votre serveur
+	// Nom du rôle Owner
+	OwnerRoleName = "👑Owner"
 )
 
 func init() {
@@ -376,7 +376,11 @@ func hasOwnerRole(s *discordgo.Session, guildID, userID string) bool {
 
 	// Vérifier si l'utilisateur a le rôle Owner
 	for _, roleID := range member.Roles {
-		if roleID == OwnerRoleID {
+		role, err := s.State.Role(guildID, roleID)
+		if err != nil {
+			continue
+		}
+		if role.Name == OwnerRoleName {
 			return true
 		}
 	}
