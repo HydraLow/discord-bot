@@ -365,7 +365,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Analyser la commande
 		parts := strings.Fields(m.Content)
 		if len(parts) != 2 {
-			_, err := s.ChannelMessageSend(m.ChannelID, "Usage: !unban ID")
+			_, err := s.ChannelMessageSend(m.ChannelID, "Usage: !unban @utilisateur ou !unban ID")
 			if err != nil {
 				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 			}
@@ -374,6 +374,10 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		// Extraire l'ID de l'utilisateur à débannir
 		targetID := parts[1]
+		// Si c'est une mention, nettoyer l'ID
+		if strings.HasPrefix(targetID, "<@") && strings.HasSuffix(targetID, ">") {
+			targetID = strings.Trim(targetID, "<@!>")
+		}
 
 		// Débannir l'utilisateur
 		err := s.GuildBanDelete(m.GuildID, targetID)
