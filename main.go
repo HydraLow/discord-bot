@@ -382,9 +382,23 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		// Extraire l'ID de l'utilisateur à débannir
 		targetID := parts[1]
-		// Si c'est une mention, nettoyer l'ID
+		
+		// Si c'est une mention, extraire l'ID
 		if strings.HasPrefix(targetID, "<@") && strings.HasSuffix(targetID, ">") {
-			targetID = strings.Trim(targetID, "<@!>")
+			// Enlever <@ et >
+			targetID = strings.TrimPrefix(targetID, "<@")
+			targetID = strings.TrimSuffix(targetID, ">")
+			// Enlever le ! s'il y en a un
+			targetID = strings.TrimPrefix(targetID, "!")
+		}
+
+		// Vérifier si l'ID est valide
+		if _, err := strconv.ParseInt(targetID, 10, 64); err != nil {
+			_, err := s.ChannelMessageSend(m.ChannelID, "❌ ID d'utilisateur invalide. Utilisez un ID valide ou une mention.")
+			if err != nil {
+				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+			}
+			return
 		}
 
 		// Débannir l'utilisateur
