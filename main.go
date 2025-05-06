@@ -16,6 +16,11 @@ import (
 
 var (
 	Token string
+	// Liste des IDs des rôles autorisés à utiliser la commande kick
+	AllowedRoles = []string{
+		"ADMIN_ROLE_ID", // Remplacez par l'ID du rôle admin
+		"MOD_ROLE_ID",   // Remplacez par l'ID du rôle modérateur
+	}
 )
 
 func init() {
@@ -100,7 +105,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		helpMessage := "**Commandes disponibles:**\n" +
 			"!ping - Vérifier si le bot est en ligne\n" +
 			"!help - Afficher ce message d'aide\n" +
-			"!rps [pierre/papier/ciseaux] - Jouer à Pierre, Papier, Ciseaux"
+			"!rps [pierre/papier/ciseaux] - Jouer à Pierre, Papier, Ciseaux\n" +
+			"!kick @utilisateur [raison] - Expulser un utilisateur (Propriétaire uniquement)"
 		_, err := s.ChannelMessageSend(m.ChannelID, helpMessage)
 		if err != nil {
 			fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
@@ -142,6 +148,62 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			playerChoice, botChoice, result)
 
 		_, err := s.ChannelMessageSend(m.ChannelID, resultMessage)
+		if err != nil {
+			fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+		}
+	}
+
+	// Commande Kick
+	if strings.HasPrefix(m.Content, "!kick") {
+		// Récupérer les informations du serveur
+		guild, err := s.Guild(m.GuildID)
+		if err != nil {
+			fmt.Printf("Erreur lors de la récupération du serveur: %v\n", err)
+			return
+		}
+
+		// Vérifier si l'utilisateur est le propriétaire du serveur
+		if m.Author.ID != guild.OwnerID {
+			_, err := s.ChannelMessageSend(m.ChannelID, "❌ Seul le propriétaire du serveur peut utiliser cette commande!")
+			if err != nil {
+				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+			}
+			return
+		}
+
+		// Analyser la commande
+		parts := strings.Fields(m.Content)
+		if len(parts) < 2 {
+			_, err := s.ChannelMessageSend(m.ChannelID, "Usage: !kick @utilisateur [raison]")
+			if err != nil {
+				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+			}
+			return
+		}
+
+		// Extraire l'ID de l'utilisateur à expulser
+		targetID := strings.Trim(parts[1], "<@!>")
+		
+		// Extraire la raison (optionnelle)
+		reason := "Aucune raison fournie"
+		if len(parts) > 2 {
+			reason = strings.Join(parts[2:], " ")
+		}
+
+		// Expulser l'utilisateur
+		err = s.GuildMemberDeleteWithReason(m.GuildID, targetID, reason)
+		if err != nil {
+			errorMsg := fmt.Sprintf("❌ Erreur lors de l'expulsion: %v", err)
+			_, err := s.ChannelMessageSend(m.ChannelID, errorMsg)
+			if err != nil {
+				fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
+			}
+			return
+		}
+
+		// Confirmer l'expulsion
+		successMsg := fmt.Sprintf("✅ Utilisateur expulsé avec succès!\nRaison: %s", reason)
+		_, err = s.ChannelMessageSend(m.ChannelID, successMsg)
 		if err != nil {
 			fmt.Printf("Erreur lors de l'envoi du message: %v\n", err)
 		}
